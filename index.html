@@ -23,8 +23,11 @@
             top:0; 
             z-index:10; 
             box-shadow: 0 2px 10px rgba(0,122,255,0.1);
+            flex-wrap: wrap;
+            gap: 10px;
         }
         h1 { margin:0; font-size:22px; color:#007aff; font-weight:700; }
+        
         #balance-container { 
             display:flex; 
             align-items:center; 
@@ -35,6 +38,7 @@
             font-weight:700; 
             font-size:18px; 
             color:#007aff;
+            white-space: nowrap;
         }
         #balance { color:#007aff; }
         #plus-btn { 
@@ -47,7 +51,19 @@
             display:flex; 
             align-items:center; 
             justify-content:center;
+            flex-shrink: 0;
         }
+        
+        #connect-btn { 
+            background:#007aff; 
+            color:white; 
+            border:none; 
+            padding:10px 20px; 
+            border-radius:12px; 
+            font-weight:600; 
+            white-space: nowrap;
+        }
+        
         .nft-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:15px; padding:15px; }
         .nft-card { 
             background:#ffffff; 
@@ -67,7 +83,7 @@
             width:100%; 
             font-weight:600; 
         }
-        button.buy:hover { background:#0066cc; }
+        
         .modal { 
             display:none; 
             position:fixed; 
@@ -85,7 +101,6 @@
             width:90%; 
             max-width:320px; 
             text-align:center; 
-            box-shadow: 0 10px 30px rgba(0,122,255,0.2);
         }
         input { width:100%; padding:12px; font-size:18px; border:2px solid #007aff; border-radius:12px; margin:15px 0; }
     </style>
@@ -93,10 +108,13 @@
 <body>
     <header>
         <h1>Transparency</h1>
+        
         <div id="balance-container">
             <span id="balance">0.00</span> TON
             <button id="plus-btn" onclick="showDepositModal()">+</button>
         </div>
+        
+        <button id="connect-btn">Подключить кошелёк</button>
     </header>
 
     <div class="filters" style="padding:10px; background:#fff; display:flex; gap:10px; flex-wrap:wrap;">
@@ -108,10 +126,11 @@
         <div style="text-align:center;padding:20px;color:#666;">Загружаем реальные NFT...</div>
     </div>
 
-    <!-- Модальное окно для депозита -->
+    <!-- Модальное окно депозита -->
     <div id="deposit-modal" class="modal">
         <div class="modal-content">
             <h3 style="color:#007aff;">Добавить TON на баланс бота</h3>
+            <p style="color:#666; font-size:14px;">Если кошелёк не подключён — подключится автоматически</p>
             <input id="deposit-amount" type="number" step="0.01" placeholder="Сумма TON" value="10">
             <br>
             <button onclick="confirmDeposit()" style="background:#007aff;color:white;border:none;padding:12px 30px;border-radius:12px;margin:10px;">Отправить TON</button>
@@ -120,7 +139,6 @@
     </div>
 
     <script>
-        // === ТВОИ ДАННЫЕ ===
         const API_KEY = 'AG2SZBO6JHBPRGQAAAAO7WCWWAFLE7RM5YCSTJTQQSCC3GHDSPNVEKAL6NIHQVACOOZMHII';
         const MARKET_WALLET = 'UQDLUQwxUttwdqd4VBOpqAAHwzPH_O7QTCVhCceKuDyh-DKI';
 
@@ -130,64 +148,57 @@
         let tonConnectUI;
         let isConnected = false;
         let userAddress = null;
-        let depositBalance = 0;           // ← вот твой баланс в боте
+        let depositBalance = 0;
         let allNFTs = [];
 
-        // TonConnect
         async function initTonConnect() {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
                 manifestUrl: 'https://raw.githubusercontent.com/maivonai/transparencyMRKT/main/tonconnect-manifest.json',
-                buttonRootId: 'plus-btn'   // кнопка Connect появляется при первом нажатии +
+                buttonRootId: 'connect-btn'
             });
 
             tonConnectUI.onStatusChange(wallet => {
                 if (wallet) {
                     isConnected = true;
                     userAddress = wallet.account.address;
+                    document.getElementById('connect-btn').textContent = 'Connected ✓';
+                    document.getElementById('connect-btn').disabled = true;
                 }
             });
         }
 
-        // === ДЕПОЗИТ (отправка тонов на баланс бота) ===
+        // Кнопка + теперь всегда работает
         function showDepositModal() {
-            if (!isConnected) {
-                alert('Сначала подключи кошелёк через кнопку "+"');
-                return;
-            }
             document.getElementById('deposit-modal').style.display = 'flex';
         }
         function closeModal() {
             document.getElementById('deposit-modal').style.display = 'none';
         }
+
         async function confirmDeposit() {
-            const amountStr = document.getElementById('deposit-amount').value;
-            const amount = parseFloat(amountStr);
+            const amount = parseFloat(document.getElementById('deposit-amount').value);
             if (!amount || amount <= 0) return alert('Введи правильную сумму');
 
             closeModal();
 
             try {
-                const nanoAmount = (amount * 1_000_000_000).toString();
                 await tonConnectUI.sendTransaction({
                     validUntil: Math.floor(Date.now() / 1000) + 300,
                     messages: [{
                         address: MARKET_WALLET,
-                        amount: nanoAmount,
-                        payload: btoa(`deposit Transparency ${userAddress || ''}`)
+                        amount: (amount * 1_000_000_000).toString(),
+                        payload: btoa(`deposit Transparency`)
                     }]
                 });
 
-                // Увеличиваем баланс сразу
                 depositBalance += amount;
                 document.getElementById('balance').textContent = depositBalance.toFixed(2);
-
-                alert(`✅ Отправлено ${amount} TON на баланс бота!\nБаланс обновлён.`);
+                alert(`✅ ${amount} TON отправлено на баланс бота!`);
             } catch (e) {
                 alert('Ошибка отправки: ' + e.message);
             }
         }
 
-        // === МАРКЕТПЛЕЙС (реальные NFT) ===
         async function loadNFTs() {
             try {
                 const res = await fetch(`https://tonapi.io/v2/nfts/items?limit=50`, {
@@ -219,24 +230,18 @@
         }
 
         async function buyNFT(nftAddr) {
-            if (!isConnected) return alert('Сначала подключи кошелёк!');
             try {
                 await tonConnectUI.sendTransaction({
                     validUntil: Math.floor(Date.now() / 1000) + 300,
-                    messages: [{
-                        address: MARKET_WALLET,
-                        amount: "10000000000",
-                        payload: btoa(`buy NFT ${nftAddr}`)
-                    }]
+                    messages: [{ address: MARKET_WALLET, amount: "10000000000", payload: btoa(`buy NFT`) }]
                 });
-                alert('✅ NFT куплен (10 TON отправлено на мой кошелёк)');
+                alert('✅ NFT куплен (10 TON отправлено)');
             } catch (e) { alert('Ошибка: ' + e.message); }
         }
 
         function filterPrice() { renderNFTs(allNFTs); }
         function sortLatest() { renderNFTs(allNFTs); }
 
-        // Запуск
         window.onload = () => {
             initTonConnect();
             loadNFTs();
