@@ -19,12 +19,13 @@
         .nft-card h3 { margin:10px 0 5px; font-size:16px; }
         .nft-card p { color:#00ff9d; font-weight:700; }
         button.buy { background:#00c853; color:white; border:none; padding:10px; width:100%; font-weight:600; }
+        .loading { text-align:center; padding:20px; color:#888; }
     </style>
 </head>
 <body>
     <header>
         <h1>Transparency</h1>
-        <div>Баланс бота: <span id="balance">0.00</span> TON</div>
+        <div>Ваш баланс: <span id="balance">0.00</span> TON</div>
         <button id="connect-btn">Connect Wallet</button>
     </header>
 
@@ -33,13 +34,14 @@
         <button onclick="sortLatest()">Сначала новые</button>
     </div>
 
-    <div id="nft-list" class="nft-list"></div>
+    <div id="nft-list" class="nft-list">
+        <div class="loading">Загружаем реальные NFT с TON...</div>
+    </div>
 
     <script>
         // === ТВОИ ДАННЫЕ ===
         const API_KEY = 'AG2SZBO6JHBPRGQAAAAO7WCWWAFLE7RM5YCSTJTQQSCC3GHDSPNVEKAL6NIHQVACOOZMHII';
         const MARKET_WALLET = 'UQDLUQwxUttwdqd4VBOpqAAHwzPH_O7QTCVhCceKuDyh-DKI';
-        const COLLECTION = 'EQD0df7-zxazBS0jlkGLyTJgEITMX34RiIcRglL2lc4i4IlG';
 
         const tg = window.Telegram.WebApp;
         tg.expand(); tg.ready(); tg.setHeaderColor("#121212");
@@ -47,27 +49,30 @@
         let tonConnectUI;
         let isConnected = false;
         let allNFTs = [];
+        let userAddress = null;
 
         // TonConnect
         async function initTonConnect() {
-            const manifestUrl = 'https://raw.githubusercontent.com/ТВОЙ-ЛОГИН/transparency/main/tonconnect-manifest.json';
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-                manifestUrl: manifestUrl,
+                manifestUrl: 'https://raw.githubusercontent.com/maivonai/transparencyMRKT/main/tonconnect-manifest.json',
                 buttonRootId: 'connect-btn'
             });
 
             tonConnectUI.onStatusChange(wallet => {
                 if (wallet) {
                     isConnected = true;
+                    userAddress = wallet.account.address;
                     document.getElementById('connect-btn').textContent = 'Connected ✓';
+                    loadUserBalance();
                 }
             });
         }
 
-        // Реальный TON API (твой ключ)
-        async function loadBalance() {
+        // === БАЛАНС ПОДКЛЮЧЁННОГО ПОЛЬЗОВАТЕЛЯ ===
+        async function loadUserBalance() {
+            if (!userAddress) return;
             try {
-                const res = await fetch(`https://tonapi.io/v2/accounts/${MARKET_WALLET}`, {
+                const res = await fetch(`https://tonapi.io/v2/accounts/${userAddress}`, {
                     headers: { 'Authorization': `Bearer ${API_KEY}` }
                 });
                 const data = await res.json();
@@ -76,27 +81,35 @@
             } catch (e) { console.error('Ошибка баланса:', e); }
         }
 
+        // === РЕАЛЬНЫЙ МАРКЕТПЛЕЙС — 50 свежих NFT ===
         async function loadNFTs() {
             try {
-                const res = await fetch(`https://tonapi.io/v2/nfts/collections/${COLLECTION}/items?limit=50`, {
+                const res = await fetch(`https://tonapi.io/v2/nfts/items?limit=50`, {
                     headers: { 'Authorization': `Bearer ${API_KEY}` }
                 });
                 const data = await res.json();
                 allNFTs = data.nft_items || [];
                 renderNFTs(allNFTs);
-            } catch (e) { console.error('Ошибка загрузки NFT:', e); }
+            } catch (e) {
+                document.getElementById('nft-list').innerHTML = '<div class="loading">Ошибка загрузки NFT. Попробуй обновить.</div>';
+                console.error(e);
+            }
         }
 
         function renderNFTs(nfts) {
             const container = document.getElementById('nft-list');
             container.innerHTML = '';
+            if (nfts.length === 0) {
+                container.innerHTML = '<div class="loading">Пока нет NFT</div>';
+                return;
+            }
             nfts.forEach(nft => {
                 const meta = nft.metadata || {};
                 const card = document.createElement('div');
                 card.className = 'nft-card';
                 card.innerHTML = `
                     <img src="${meta.image || 'https://via.placeholder.com/300?text=NFT'}" alt="${meta.name}">
-                    <h3>${meta.name || 'NFT'} #${nft.index}</h3>
+                    <h3>${meta.name || 'NFT'} #${nft.index || ''}</h3>
                     <p>10 TON</p>
                     <button class="buy" onclick="buyNFT('${nft.address}')">Купить</button>
                 `;
@@ -104,6 +117,7 @@
             });
         }
 
+        // Покупка — деньги идут НА ТВОЙ КОШЕЛЁК
         async function buyNFT(nftAddr) {
             if (!isConnected) return alert('Сначала подключи кошелёк!');
             try {
@@ -115,19 +129,19 @@
                         payload: btoa(`buy Transparency NFT ${nftAddr}`)
                     }]
                 });
-                alert('✅ Вы отправили 10 TON на мой кошелёк!\nБаланс обновится через пару секунд.');
-                setTimeout(loadBalance, 3000);
+                alert('✅ Вы отправили 10 TON на мой кошелёк!\nТвой баланс обновится через пару секунд.');
+                setTimeout(loadUserBalance, 3000);
             } catch (e) { alert('Ошибка: ' + e.message); }
         }
 
         function filterPrice() { renderNFTs(allNFTs); }
         function sortLatest() { renderNFTs(allNFTs); }
 
+        // Запуск
         window.onload = () => {
             initTonConnect();
             loadNFTs();
-            loadBalance();
-            setInterval(loadBalance, 10000);
+            setInterval(() => { if (isConnected) loadUserBalance(); }, 10000);
         };
     </script>
 </body>
