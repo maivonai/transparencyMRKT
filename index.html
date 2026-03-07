@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Transparency - TON NFT Marketplace</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
+    <style>
+        body { margin:0; padding:0; background:#121212; color:#fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        header { padding:15px; background:#1f1f1f; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10; flex-wrap:wrap; gap:10px; }
+        h1 { margin:0; font-size:20px; }
+        #balance { font-weight:700; color:#00ff9d; }
+        #connect-btn { background:#007aff; color:white; border:none; padding:10px 20px; border-radius:12px; font-weight:600; }
+        .filters { padding:10px; background:#1f1f1f; display:flex; gap:10px; flex-wrap:wrap; }
+        .nft-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:15px; padding:15px; }
+        .nft-card { background:#1f1f1f; border-radius:16px; overflow:hidden; text-align:center; }
+        .nft-card img { width:100%; height:160px; object-fit:cover; }
+        .nft-card h3 { margin:10px 0 5px; font-size:16px; }
+        .nft-card p { color:#00ff9d; font-weight:700; }
+        button.buy { background:#00c853; color:white; border:none; padding:10px; width:100%; font-weight:600; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Transparency</h1>
+        <div>Баланс бота: <span id="balance">0.00</span> TON</div>
+        <button id="connect-btn">Connect Wallet</button>
+    </header>
+
+    <div class="filters">
+        <button onclick="filterPrice(0)">Все</button>
+        <button onclick="sortLatest()">Сначала новые</button>
+    </div>
+
+    <div id="nft-list" class="nft-list"></div>
+
+    <script>
+        // === ТВОИ ДАННЫЕ ===
+        const API_KEY = 'AG2SZBO6JHBPRGQAAAAO7WCWWAFLE7RM5YCSTJTQQSCC3GHDSPNVEKAL6NIHQVACOOZMHII';
+        const MARKET_WALLET = 'UQDLUQwxUttwdqd4VBOpqAAHwzPH_O7QTCVhCceKuDyh-DKI';
+        const COLLECTION = 'EQD0df7-zxazBS0jlkGLyTJgEITMX34RiIcRglL2lc4i4IlG';
+
+        const tg = window.Telegram.WebApp;
+        tg.expand(); tg.ready(); tg.setHeaderColor("#121212");
+
+        let tonConnectUI;
+        let isConnected = false;
+        let allNFTs = [];
+
+        // TonConnect
+        async function initTonConnect() {
+            const manifestUrl = 'https://raw.githubusercontent.com/ТВОЙ-ЛОГИН/transparency/main/tonconnect-manifest.json';
+            tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
+                manifestUrl: manifestUrl,
+                buttonRootId: 'connect-btn'
+            });
+
+            tonConnectUI.onStatusChange(wallet => {
+                if (wallet) {
+                    isConnected = true;
+                    document.getElementById('connect-btn').textContent = 'Connected ✓';
+                }
+            });
+        }
+
+        // Реальный TON API (твой ключ)
+        async function loadBalance() {
+            try {
+                const res = await fetch(`https://tonapi.io/v2/accounts/${MARKET_WALLET}`, {
+                    headers: { 'Authorization': `Bearer ${API_KEY}` }
+                });
+                const data = await res.json();
+                const ton = (data.balance / 1_000_000_000).toFixed(2);
+                document.getElementById('balance').textContent = ton;
+            } catch (e) { console.error('Ошибка баланса:', e); }
+        }
+
+        async function loadNFTs() {
+            try {
+                const res = await fetch(`https://tonapi.io/v2/nfts/collections/${COLLECTION}/items?limit=50`, {
+                    headers: { 'Authorization': `Bearer ${API_KEY}` }
+                });
+                const data = await res.json();
+                allNFTs = data.nft_items || [];
+                renderNFTs(allNFTs);
+            } catch (e) { console.error('Ошибка загрузки NFT:', e); }
+        }
+
+        function renderNFTs(nfts) {
+            const container = document.getElementById('nft-list');
+            container.innerHTML = '';
+            nfts.forEach(nft => {
+                const meta = nft.metadata || {};
+                const card = document.createElement('div');
+                card.className = 'nft-card';
+                card.innerHTML = `
+                    <img src="${meta.image || 'https://via.placeholder.com/300?text=NFT'}" alt="${meta.name}">
+                    <h3>${meta.name || 'NFT'} #${nft.index}</h3>
+                    <p>10 TON</p>
+                    <button class="buy" onclick="buyNFT('${nft.address}')">Купить</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function buyNFT(nftAddr) {
+            if (!isConnected) return alert('Сначала подключи кошелёк!');
+            try {
+                await tonConnectUI.sendTransaction({
+                    validUntil: Math.floor(Date.now() / 1000) + 300,
+                    messages: [{
+                        address: MARKET_WALLET,
+                        amount: "10000000000",
+                        payload: btoa(`buy Transparency NFT ${nftAddr}`)
+                    }]
+                });
+                alert('✅ Вы отправили 10 TON на мой кошелёк!\nБаланс обновится через пару секунд.');
+                setTimeout(loadBalance, 3000);
+            } catch (e) { alert('Ошибка: ' + e.message); }
+        }
+
+        function filterPrice() { renderNFTs(allNFTs); }
+        function sortLatest() { renderNFTs(allNFTs); }
+
+        window.onload = () => {
+            initTonConnect();
+            loadNFTs();
+            loadBalance();
+            setInterval(loadBalance, 10000);
+        };
+    </script>
+</body>
+</html>
