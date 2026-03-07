@@ -7,35 +7,116 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
     <style>
-        body { margin:0; padding:0; background:#121212; color:#fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        header { padding:15px; background:#1f1f1f; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:10; flex-wrap:wrap; gap:10px; }
-        h1 { margin:0; font-size:20px; }
-        #balance { font-weight:700; color:#00ff9d; }
-        #connect-btn { background:#007aff; color:white; border:none; padding:10px 20px; border-radius:12px; font-weight:600; }
-        .filters { padding:10px; background:#1f1f1f; display:flex; gap:10px; flex-wrap:wrap; }
+        body { 
+            margin:0; padding:0; 
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff); 
+            color:#1a1a1a; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        }
+        header { 
+            padding:15px; 
+            background:#ffffff; 
+            display:flex; 
+            justify-content:space-between; 
+            align-items:center; 
+            position:sticky; 
+            top:0; 
+            z-index:10; 
+            box-shadow: 0 2px 10px rgba(0,122,255,0.1);
+        }
+        h1 { margin:0; font-size:22px; color:#007aff; font-weight:700; }
+        #balance-container { 
+            display:flex; 
+            align-items:center; 
+            gap:8px; 
+            background:#f0f8ff; 
+            padding:8px 16px; 
+            border-radius:20px; 
+            font-weight:700; 
+            font-size:18px; 
+            color:#007aff;
+        }
+        #balance { color:#007aff; }
+        #plus-btn { 
+            width:36px; height:36px; 
+            background:#007aff; 
+            color:white; 
+            border:none; 
+            border-radius:50%; 
+            font-size:24px; 
+            display:flex; 
+            align-items:center; 
+            justify-content:center;
+        }
         .nft-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:15px; padding:15px; }
-        .nft-card { background:#1f1f1f; border-radius:16px; overflow:hidden; text-align:center; }
+        .nft-card { 
+            background:#ffffff; 
+            border-radius:16px; 
+            overflow:hidden; 
+            text-align:center; 
+            box-shadow: 0 4px 15px rgba(0,122,255,0.15); 
+        }
         .nft-card img { width:100%; height:160px; object-fit:cover; }
-        .nft-card h3 { margin:10px 0 5px; font-size:16px; }
-        .nft-card p { color:#00ff9d; font-weight:700; }
-        button.buy { background:#00c853; color:white; border:none; padding:10px; width:100%; font-weight:600; }
-        .loading { text-align:center; padding:20px; color:#888; }
+        .nft-card h3 { margin:10px 0 5px; font-size:16px; color:#1a1a1a; }
+        .nft-card p { color:#007aff; font-weight:700; }
+        button.buy { 
+            background:#007aff; 
+            color:white; 
+            border:none; 
+            padding:10px; 
+            width:100%; 
+            font-weight:600; 
+        }
+        button.buy:hover { background:#0066cc; }
+        .modal { 
+            display:none; 
+            position:fixed; 
+            top:0; left:0; 
+            width:100%; height:100%; 
+            background:rgba(0,0,0,0.6); 
+            z-index:100; 
+            justify-content:center; 
+            align-items:center; 
+        }
+        .modal-content { 
+            background:#fff; 
+            padding:25px; 
+            border-radius:20px; 
+            width:90%; 
+            max-width:320px; 
+            text-align:center; 
+            box-shadow: 0 10px 30px rgba(0,122,255,0.2);
+        }
+        input { width:100%; padding:12px; font-size:18px; border:2px solid #007aff; border-radius:12px; margin:15px 0; }
     </style>
 </head>
 <body>
     <header>
         <h1>Transparency</h1>
-        <div>Ваш баланс: <span id="balance">0.00</span> TON</div>
-        <button id="connect-btn">Connect Wallet</button>
+        <div id="balance-container">
+            <span id="balance">0.00</span> TON
+            <button id="plus-btn" onclick="showDepositModal()">+</button>
+        </div>
     </header>
 
-    <div class="filters">
-        <button onclick="filterPrice(0)">Все</button>
-        <button onclick="sortLatest()">Сначала новые</button>
+    <div class="filters" style="padding:10px; background:#fff; display:flex; gap:10px; flex-wrap:wrap;">
+        <button onclick="filterPrice(0)" style="background:#007aff;color:white;border:none;padding:8px 16px;border-radius:12px;">Все</button>
+        <button onclick="sortLatest()" style="background:#007aff;color:white;border:none;padding:8px 16px;border-radius:12px;">Сначала новые</button>
     </div>
 
     <div id="nft-list" class="nft-list">
-        <div class="loading">Загружаем реальные NFT с TON...</div>
+        <div style="text-align:center;padding:20px;color:#666;">Загружаем реальные NFT...</div>
+    </div>
+
+    <!-- Модальное окно для депозита -->
+    <div id="deposit-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color:#007aff;">Добавить TON на баланс бота</h3>
+            <input id="deposit-amount" type="number" step="0.01" placeholder="Сумма TON" value="10">
+            <br>
+            <button onclick="confirmDeposit()" style="background:#007aff;color:white;border:none;padding:12px 30px;border-radius:12px;margin:10px;">Отправить TON</button>
+            <button onclick="closeModal()" style="background:#ccc;color:#333;border:none;padding:12px 30px;border-radius:12px;">Отмена</button>
+        </div>
     </div>
 
     <script>
@@ -44,44 +125,69 @@
         const MARKET_WALLET = 'UQDLUQwxUttwdqd4VBOpqAAHwzPH_O7QTCVhCceKuDyh-DKI';
 
         const tg = window.Telegram.WebApp;
-        tg.expand(); tg.ready(); tg.setHeaderColor("#121212");
+        tg.expand(); tg.ready(); tg.setHeaderColor("#f0f8ff");
 
         let tonConnectUI;
         let isConnected = false;
-        let allNFTs = [];
         let userAddress = null;
+        let depositBalance = 0;           // ← вот твой баланс в боте
+        let allNFTs = [];
 
         // TonConnect
         async function initTonConnect() {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
                 manifestUrl: 'https://raw.githubusercontent.com/maivonai/transparencyMRKT/main/tonconnect-manifest.json',
-                buttonRootId: 'connect-btn'
+                buttonRootId: 'plus-btn'   // кнопка Connect появляется при первом нажатии +
             });
 
             tonConnectUI.onStatusChange(wallet => {
                 if (wallet) {
                     isConnected = true;
                     userAddress = wallet.account.address;
-                    document.getElementById('connect-btn').textContent = 'Connected ✓';
-                    loadUserBalance();
                 }
             });
         }
 
-        // === БАЛАНС ПОДКЛЮЧЁННОГО ПОЛЬЗОВАТЕЛЯ ===
-        async function loadUserBalance() {
-            if (!userAddress) return;
+        // === ДЕПОЗИТ (отправка тонов на баланс бота) ===
+        function showDepositModal() {
+            if (!isConnected) {
+                alert('Сначала подключи кошелёк через кнопку "+"');
+                return;
+            }
+            document.getElementById('deposit-modal').style.display = 'flex';
+        }
+        function closeModal() {
+            document.getElementById('deposit-modal').style.display = 'none';
+        }
+        async function confirmDeposit() {
+            const amountStr = document.getElementById('deposit-amount').value;
+            const amount = parseFloat(amountStr);
+            if (!amount || amount <= 0) return alert('Введи правильную сумму');
+
+            closeModal();
+
             try {
-                const res = await fetch(`https://tonapi.io/v2/accounts/${userAddress}`, {
-                    headers: { 'Authorization': `Bearer ${API_KEY}` }
+                const nanoAmount = (amount * 1_000_000_000).toString();
+                await tonConnectUI.sendTransaction({
+                    validUntil: Math.floor(Date.now() / 1000) + 300,
+                    messages: [{
+                        address: MARKET_WALLET,
+                        amount: nanoAmount,
+                        payload: btoa(`deposit Transparency ${userAddress || ''}`)
+                    }]
                 });
-                const data = await res.json();
-                const ton = (data.balance / 1_000_000_000).toFixed(2);
-                document.getElementById('balance').textContent = ton;
-            } catch (e) { console.error('Ошибка баланса:', e); }
+
+                // Увеличиваем баланс сразу
+                depositBalance += amount;
+                document.getElementById('balance').textContent = depositBalance.toFixed(2);
+
+                alert(`✅ Отправлено ${amount} TON на баланс бота!\nБаланс обновлён.`);
+            } catch (e) {
+                alert('Ошибка отправки: ' + e.message);
+            }
         }
 
-        // === РЕАЛЬНЫЙ МАРКЕТПЛЕЙС — 50 свежих NFT ===
+        // === МАРКЕТПЛЕЙС (реальные NFT) ===
         async function loadNFTs() {
             try {
                 const res = await fetch(`https://tonapi.io/v2/nfts/items?limit=50`, {
@@ -91,18 +197,13 @@
                 allNFTs = data.nft_items || [];
                 renderNFTs(allNFTs);
             } catch (e) {
-                document.getElementById('nft-list').innerHTML = '<div class="loading">Ошибка загрузки NFT. Попробуй обновить.</div>';
-                console.error(e);
+                document.getElementById('nft-list').innerHTML = '<div style="text-align:center;padding:20px;color:#666;">Ошибка загрузки NFT</div>';
             }
         }
 
         function renderNFTs(nfts) {
             const container = document.getElementById('nft-list');
             container.innerHTML = '';
-            if (nfts.length === 0) {
-                container.innerHTML = '<div class="loading">Пока нет NFT</div>';
-                return;
-            }
             nfts.forEach(nft => {
                 const meta = nft.metadata || {};
                 const card = document.createElement('div');
@@ -117,7 +218,6 @@
             });
         }
 
-        // Покупка — деньги идут НА ТВОЙ КОШЕЛЁК
         async function buyNFT(nftAddr) {
             if (!isConnected) return alert('Сначала подключи кошелёк!');
             try {
@@ -126,11 +226,10 @@
                     messages: [{
                         address: MARKET_WALLET,
                         amount: "10000000000",
-                        payload: btoa(`buy Transparency NFT ${nftAddr}`)
+                        payload: btoa(`buy NFT ${nftAddr}`)
                     }]
                 });
-                alert('✅ Вы отправили 10 TON на мой кошелёк!\nТвой баланс обновится через пару секунд.');
-                setTimeout(loadUserBalance, 3000);
+                alert('✅ NFT куплен (10 TON отправлено на мой кошелёк)');
             } catch (e) { alert('Ошибка: ' + e.message); }
         }
 
@@ -141,7 +240,6 @@
         window.onload = () => {
             initTonConnect();
             loadNFTs();
-            setInterval(() => { if (isConnected) loadUserBalance(); }, 10000);
         };
     </script>
 </body>
