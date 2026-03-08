@@ -130,11 +130,20 @@
     <div id="deposit-modal" class="modal">
         <div class="modal-content">
             <h3 style="color:#007aff;">Добавить TON на баланс бота</h3>
-            <p style="color:#666; font-size:14px;">Если кошелёк не подключён — подключится автоматически</p>
             <input id="deposit-amount" type="number" step="0.01" placeholder="Сумма TON" value="10">
             <br>
             <button onclick="confirmDeposit()" style="background:#007aff;color:white;border:none;padding:12px 30px;border-radius:12px;margin:10px;">Отправить TON</button>
-            <button onclick="closeModal()" style="background:#ccc;color:#333;border:none;padding:12px 30px;border-radius:12px;">Отмена</button>
+            <button onclick="closeDepositModal()" style="background:#ccc;color:#333;border:none;padding:12px 30px;border-radius:12px;">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Новое модальное окно кошелька (с кнопкой отключения) -->
+    <div id="wallet-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="color:#007aff;">Ваш кошелёк</h3>
+            <p style="font-family: monospace; font-size:16px; color:#333; word-break:break-all;" id="wallet-address">UQ...</p>
+            <button onclick="disconnectWallet()" style="background:#ff3b30;color:white;border:none;padding:12px 30px;border-radius:12px;margin:10px;width:100%;">Отключить кошелёк</button>
+            <button onclick="closeWalletModal()" style="background:#ccc;color:#333;border:none;padding:12px 30px;border-radius:12px;width:100%;">Закрыть</button>
         </div>
     </div>
 
@@ -153,33 +162,71 @@
 
         async function initTonConnect() {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
-                manifestUrl: 'https://raw.githubusercontent.com/maivonai/transparencyMRKT/main/tonconnect-manifest.json',
-                buttonRootId: 'connect-btn'
+                manifestUrl: 'https://raw.githubusercontent.com/maivonai/transparencyMRKT/main/tonconnect-manifest.json'
             });
 
-            tonConnectUI.onStatusChange(wallet => {
+            tonConnectUI.onStatusChange((wallet) => {
                 if (wallet) {
                     isConnected = true;
                     userAddress = wallet.account.address;
-                    document.getElementById('connect-btn').textContent = 'Connected ✓';
-                    document.getElementById('connect-btn').disabled = true;
+                    document.getElementById('connect-btn').textContent = 'Кошелёк подключён ✓';
+                } else {
+                    isConnected = false;
+                    userAddress = null;
+                    document.getElementById('connect-btn').textContent = 'Подключить кошелёк';
                 }
             });
         }
 
-        // Кнопка + теперь всегда работает
+        // Обработка нажатия на кнопку подключения
+        async function handleConnectClick() {
+            if (isConnected) {
+                showWalletModal();
+            } else {
+                try {
+                    await tonConnectUI.openModal();
+                } catch (e) {
+                    console.error('Ошибка открытия модалки подключения:', e);
+                }
+            }
+        }
+
+        // Модалка кошелька
+        function showWalletModal() {
+            const addrEl = document.getElementById('wallet-address');
+            const shortAddr = userAddress ? userAddress.slice(0, 6) + '...' + userAddress.slice(-4) : '—';
+            addrEl.textContent = shortAddr;
+            document.getElementById('wallet-modal').style.display = 'flex';
+        }
+        function closeWalletModal() {
+            document.getElementById('wallet-modal').style.display = 'none';
+        }
+        async function disconnectWallet() {
+            try {
+                await tonConnectUI.disconnect();
+                closeWalletModal();
+            } catch (e) {
+                alert('Ошибка отключения: ' + e.message);
+            }
+        }
+
+        // Депозит
         function showDepositModal() {
             document.getElementById('deposit-modal').style.display = 'flex';
         }
-        function closeModal() {
+        function closeDepositModal() {
             document.getElementById('deposit-modal').style.display = 'none';
         }
-
         async function confirmDeposit() {
+            if (!isConnected) {
+                closeDepositModal();
+                alert('Сначала нажми "Подключить кошелёк" сверху!');
+                return;
+            }
             const amount = parseFloat(document.getElementById('deposit-amount').value);
             if (!amount || amount <= 0) return alert('Введи правильную сумму');
 
-            closeModal();
+            closeDepositModal();
 
             try {
                 await tonConnectUI.sendTransaction({
@@ -195,10 +242,11 @@
                 document.getElementById('balance').textContent = depositBalance.toFixed(2);
                 alert(`✅ ${amount} TON отправлено на баланс бота!`);
             } catch (e) {
-                alert('Ошибка отправки: ' + e.message);
+                alert('Ошибка отправки: ' + (e.message || e));
             }
         }
 
+        // Остальной код (NFT, покупка и т.д.)
         async function loadNFTs() {
             try {
                 const res = await fetch(`https://tonapi.io/v2/nfts/items?limit=50`, {
@@ -230,21 +278,24 @@
         }
 
         async function buyNFT(nftAddr) {
+            if (!isConnected) return alert('Сначала подключи кошелёк!');
             try {
                 await tonConnectUI.sendTransaction({
                     validUntil: Math.floor(Date.now() / 1000) + 300,
                     messages: [{ address: MARKET_WALLET, amount: "10000000000", payload: btoa(`buy NFT`) }]
                 });
                 alert('✅ NFT куплен (10 TON отправлено)');
-            } catch (e) { alert('Ошибка: ' + e.message); }
+            } catch (e) { alert('Ошибка: ' + (e.message || e)); }
         }
 
         function filterPrice() { renderNFTs(allNFTs); }
         function sortLatest() { renderNFTs(allNFTs); }
 
+        // Запуск
         window.onload = () => {
             initTonConnect();
             loadNFTs();
+            document.getElementById('connect-btn').onclick = handleConnectClick;
         };
     </script>
 </body>
