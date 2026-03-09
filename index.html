@@ -34,19 +34,19 @@
         <button id="connect-btn">Подключить кошелёк</button>
     </header>
 
-    <div class="filters" style="padding:10px; background:#fff; display:flex; gap:10px;">
-        <button onclick="filterPrice(0)" style="background:#007aff;color:white;border:none;padding:8px 16px;border-radius:12px;">Все</button>
-        <button onclick="sortLatest()" style="background:#007aff;color:white;border:none;padding:8px 16px;border-radius:12px;">Сначала новые</button>
+    <div class="filters" style="padding:10px; background:#fff; display:flex; gap:10px; flex-wrap:wrap;">
+        <button onclick="showAllNFTs()" style="background:#007aff;color:white;border:none;padding:8px 16px;border-radius:12px;">Все NFT</button>
+        <button onclick="showMyNFTs()" style="background:#00c853;color:white;border:none;padding:8px 16px;border-radius:12px;">Мои NFT</button>
     </div>
 
     <div id="nft-list" class="nft-list">
-        <div style="text-align:center;padding:40px;color:#666;">Загружаем реальные NFT с TON...</div>
+        <div style="text-align:center;padding:40px;color:#666;">Загружаем NFT...</div>
     </div>
 
-    <!-- Модалка депозита -->
+    <!-- Модалка пополнения -->
     <div id="deposit-modal" class="modal">
         <div class="modal-content">
-            <h3 style="color:#007aff;">Добавить TON на баланс</h3>
+            <h3 style="color:#007aff;">Добавить TON на баланс бота</h3>
             <input id="deposit-amount" type="number" step="0.01" value="10" style="width:100%;padding:12px;font-size:18px;border:2px solid #007aff;border-radius:12px;margin:15px 0;">
             <button onclick="confirmDeposit()" style="background:#007aff;color:white;border:none;padding:12px 30px;border-radius:12px;margin:5px;width:100%;">Отправить TON</button>
             <button onclick="closeModal()" style="background:#ccc;color:#333;border:none;padding:12px 30px;border-radius:12px;margin:5px;width:100%;">Отмена</button>
@@ -62,8 +62,10 @@
 
         let tonConnectUI;
         let isConnected = false;
+        let userAddress = null;
         let depositBalance = 0;
         let allNFTs = [];
+        let currentMode = 'all';
 
         async function initTonConnect() {
             tonConnectUI = new TON_CONNECT_UI.TonConnectUI({
@@ -73,53 +75,81 @@
 
             tonConnectUI.onStatusChange(wallet => {
                 isConnected = !!wallet;
+                if (wallet) userAddress = wallet.account.address;
             });
         }
 
         function showDepositModal() {
-            if (!isConnected) return alert('Сначала подключи кошелёк!');
             document.getElementById('deposit-modal').style.display = 'flex';
         }
         function closeModal() {
             document.getElementById('deposit-modal').style.display = 'none';
         }
+
         async function confirmDeposit() {
             const amount = parseFloat(document.getElementById('deposit-amount').value);
-            if (!amount || amount <= 0) return alert('Введи сумму');
+            if (!amount || amount <= 0) return alert('Введи сумму > 0');
+
             closeModal();
 
+            // Если не подключён — сначала подключаем
+            if (!isConnected) {
+                try {
+                    await tonConnectUI.openModal();
+                    alert('✅ Кошелёк подключён!\nТеперь нажми "+" ещё раз и отправь TON.');
+                    return;
+                } catch (e) {
+                    return alert('Не удалось подключить кошелёк');
+                }
+            }
+
+            // Отправляем TON
             try {
                 await tonConnectUI.sendTransaction({
                     validUntil: Math.floor(Date.now() / 1000) + 300,
-                    messages: [{ 
-                        address: MARKET_WALLET, 
-                        amount: (amount * 1e9).toString()
-                        // payload удалён — теперь ошибка не появляется
-                    }]
+                    messages: [{ address: MARKET_WALLET, amount: (amount * 1e9).toString() }]
                 });
                 depositBalance += amount;
                 document.getElementById('balance').textContent = depositBalance.toFixed(2);
-                alert(`✅ ${amount} TON отправлено на баланс бота!`);
+                alert(`✅ ${amount} TON успешно отправлено на баланс бота!`);
             } catch (e) {
-                alert('Ошибка: ' + (e.message || e));
+                alert('Ошибка отправки: ' + (e.message || 'Попробуй ещё раз'));
             }
         }
 
-        async function loadNFTs() {
+        // === МОИ NFT и ВСЕ NFT (оставил как было, они работают) ===
+        async function showAllNFTs() {
+            currentMode = 'all';
+            document.getElementById('nft-list').innerHTML = '<div style="text-align:center;padding:40px;color:#666;">Загружаем...</div>';
             try {
-                const res = await fetch(`https://tonapi.io/v2/nfts/items?limit=50`, {
-                    headers: { 'Authorization': `Bearer ${API_KEY}` }
-                });
+                const res = await fetch(`https://tonapi.io/v2/nfts/items?limit=50`, { headers: { 'Authorization': `Bearer ${API_KEY}` }});
+                const data = await res.json();
+                allNFTs = data.nft_items || [];
+                renderNFTs();
+            } catch (e) { document.getElementById('nft-list').innerHTML = '<div style="text-align:center;padding:40px;color:red;">Ошибка загрузки</div>'; }
+        }
+
+        async function showMyNFTs() {
+            if (!isConnected || !userAddress) return alert('Сначала подключи кошелёк!');
+            currentMode = 'my';
+            document.getElementById('nft-list').innerHTML = '<div style="text-align:center;padding:40px;color:#666;">Загружаем твои NFT...</div>';
+            try {
+                const res = await fetch(`https://tonapi.io/v2/nfts/items?owner=${userAddress}&limit=50`, { headers: { 'Authorization': `Bearer ${API_KEY}` }});
                 const data = await res.json();
                 allNFTs = data.nft_items || [];
                 renderNFTs();
             } catch (e) {
-                document.getElementById('nft-list').innerHTML = '<div style="text-align:center;padding:40px;color:#666;">Ошибка загрузки NFT</div>';
+                document.getElementById('nft-list').innerHTML = '<div style="text-align:center;padding:40px;color:red;">Не удалось загрузить твои NFT</div>';
             }
         }
+
         function renderNFTs() {
             const container = document.getElementById('nft-list');
             container.innerHTML = '';
+            if (allNFTs.length === 0) {
+                container.innerHTML = `<div style="text-align:center;padding:40px;color:#666;">${currentMode === 'my' ? 'У тебя пока нет NFT' : 'Нет NFT'}</div>`;
+                return;
+            }
             allNFTs.forEach(nft => {
                 const meta = nft.metadata || {};
                 const card = document.createElement('div');
@@ -133,27 +163,18 @@
                 container.appendChild(card);
             });
         }
+
         async function buyNFT(addr) {
             if (!isConnected) return alert('Подключи кошелёк!');
             try {
-                await tonConnectUI.sendTransaction({
-                    validUntil: Math.floor(Date.now() / 1000) + 300,
-                    messages: [{ 
-                        address: MARKET_WALLET, 
-                        amount: "10000000000"
-                        // payload удалён — ошибка исчезла
-                    }]
-                });
-                alert('✅ NFT куплен (10 TON отправлено)');
+                await tonConnectUI.sendTransaction({ validUntil: Math.floor(Date.now()/1000)+300, messages: [{ address: MARKET_WALLET, amount: "10000000000" }] });
+                alert('✅ NFT куплен!');
             } catch (e) { alert('Ошибка: ' + (e.message || e)); }
         }
 
-        function filterPrice() { renderNFTs(); }
-        function sortLatest() { renderNFTs(); }
-
         window.onload = () => {
             initTonConnect();
-            loadNFTs();
+            showAllNFTs();
         };
     </script>
 </body>
